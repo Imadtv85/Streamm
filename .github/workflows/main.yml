@@ -18,15 +18,14 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ffmpeg
 
-    - name: Start continuous stream to Facebook Live
-      env:
-        M3U8_LINK: "https://live4.beinconnect.us/YallaGoalApp/beINSports1.m3u8"
-        STREAM_KEY: "FB-560273093410884-0-Abw3UM1psUMieO5R"
-        OUTPUT_URL: "rtmps://live-api-s.facebook.com:443/rtmp/$STREAM_KEY"
+    - name: Start FFmpeg stream to Facebook Live
       run: |
+        M3U8_LINK="https://live4.beinconnect.us/YallaGoalApp/beINSports1.m3u8"
+        STREAM_KEY="FB-560273093410884-0-Abw3UM1psUMieO5R"
+        OUTPUT_URL="rtmps://live-api-s.facebook.com:443/rtmp/$STREAM_KEY"
+
+        # بدء البث باستخدام FFmpeg
         echo "Starting FFmpeg stream to Facebook Live..."
-        
-        # تشغيل FFmpeg بدون الخلفية
         ffmpeg -i "$M3U8_LINK" \
           -c:v libx264 \
           -preset fast \
@@ -36,15 +35,4 @@ jobs:
           -s 1280x720 \
           -c:a aac \
           -b:a 128k \
-          -f flv "$OUTPUT_URL" > ffmpeg_output.log 2>&1
-        
-        # التأكد من أن العملية تعمل بشكل صحيح
-        if ps aux | grep "[f]fmpeg"; then
-          echo "FFmpeg is running successfully."
-        else
-          echo "Error: FFmpeg process did not start correctly."
-          exit 1
-        fi
-
-        # إظهار السجلات لتتبع حالة البث
-        tail -f ffmpeg_output.log
+          -f flv "$OUTPUT_URL"
