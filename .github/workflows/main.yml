@@ -3,7 +3,7 @@ name: Continuous FFmpeg Stream to Facebook Live
 on:
   push:
     branches:
-      - main
+      - main  # أو أي فرع ترغب في تشغيله عليه
 
 jobs:
   stream:
@@ -13,26 +13,68 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Install FFmpeg
+    - name: Install FFmpeg and system monitoring tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg
+        sudo apt-get install -y ffmpeg htop sysstat
 
-    - name: Start FFmpeg stream to Facebook Live
+    - name: Start FFmpeg stream to Facebook Live with system monitoring
       run: |
         M3U8_LINK="https://live4.beinconnect.us/YallaGoalApp/beINSports1.m3u8"
-        STREAM_KEY="FB-560273093410884-0-Abw3UM1psUMieO5R"
+        STREAM_KEY="FB-560284813409712-0-Abw44EHwcFh7jvcN"  # تم تحديث المفتاح هنا
         OUTPUT_URL="rtmps://live-api-s.facebook.com:443/rtmp/$STREAM_KEY"
 
-        # بدء البث باستخدام FFmpeg
-        echo "Starting FFmpeg stream to Facebook Live..."
-        ffmpeg -i "$M3U8_LINK" \
-          -c:v libx264 \
-          -preset fast \
-          -b:v 1500k \
-          -maxrate 1500k \
-          -bufsize 3000k \
-          -s 1280x720 \
-          -c:a aac \
-          -b:a 128k \
-          -f flv "$OUTPUT_URL"
+        MAX_RETRIES=5
+        ATTEMPTS=0
+        SUCCESS=0
+
+        # دالة لإعادة المحاولة
+        while [ $ATTEMPTS -lt $MAX_RETRIES ]; do
+          echo "Attempt $((ATTEMPTS + 1)) of $MAX_RETRIES: Starting FFmpeg stream to Facebook Live..."
+          
+          # تشغيل FFmpeg
+          ffmpeg -i "$M3U8_LINK" \
+            -c:v libx264 \
+            -preset fast \
+            -b:v 1500k \
+            -maxrate 1500k \
+            -bufsize 3000k \
+            -s 1280x720 \
+            -c:a aac \
+            -b:a 128k \
+            -f flv "$OUTPUT_URL" > ffmpeg_output.log 2>&1 &
+          
+          FF_PID=$!  # حفظ معرّف العملية الخاصة بـ FFmpeg
+
+          # مراقبة الأداء واستهلاك النظام
+          echo "Monitoring system performance..."
+          echo "Use 'htop' or 'sysstat' for detailed stats during stream."
+          
+          # مراقبة عملية FFmpeg واستهلاك المعالج
+          while kill -0 $FF_PID 2>/dev/null; do
+            echo "FFmpeg is running. Checking system usage..."
+            top -n 1 | head -20
+            sleep 10  # تحديث كل 10 ثوان
+          done
+
+          if [ $? -eq 0 ]; then
+            echo "FFmpeg stream started successfully."
+            SUCCESS=1
+            break
+          else
+            ATTEMPTS=$((ATTEMPTS + 1))
+            echo "Error occurred. Retrying... Attempt $ATTEMPTS/$MAX_RETRIES"
+            tail -n 20 ffmpeg_output.log
+            sleep 5  # الانتظار قبل إعادة المحاولة
+          fi
+        done
+
+        if [ $SUCCESS -eq 0 ]; then
+          echo "FFmpeg stream failed after $MAX_RETRIES attempts."
+          exit 1
+        else
+          echo "FFmpeg stream is running successfully."
+        fi
+
+        # طباعة السجلات في حالة النجاح أو الفشل
+        tail -n 100 ffmpeg_output.log
